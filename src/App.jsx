@@ -2,6 +2,7 @@ import React from "react";
 import Header from "./components/Header";
 import HandRecognition from "./components/HandRecognition";
 import Footer from "./components/Footer";
+import { ToastContainer } from "react-toastify";
 
 const App = () => {
   return (
@@ -9,6 +10,7 @@ const App = () => {
       <Header />
       <HandRecognition />
       <Footer />
+      <ToastContainer theme="dark" />
     </div>
   );
 };

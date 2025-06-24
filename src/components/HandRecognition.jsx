@@ -1,6 +1,7 @@
 // Komponen utama untuk mendeteksi gesture tangan dan menjalankan aksi berdasarkan model
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { playSound } from "../utils/soundManager"; // 🔊 Untuk memainkan suara
+import { toast } from "react-toastify";
 import {
   loadModel, // 🔍 Load model ML dari TensorFlow.js
   screenshotAndUpload, // 📸 Screenshot dari halaman web
@@ -75,16 +76,22 @@ const HandRecognition = () => {
       });
       setScreenStream(stream); // Simpan stream desktop
       setCameraActive(true); // Langsung nyalakan kamera
-      alert("Screen capture permission granted!");
+      // alert("Screen capture permission granted!");
+      toast.success("Screen capture permission granted!", { autoClose: 3000 });
+      toast.info(
+        "🖥️ Pastikan tab ini tetap terbuka dan aktif selama gesture digunakan!",
+        { autoClose: 4000 }
+      );
 
       // Reset jika user stop sharing
       stream.getVideoTracks()[0].onended = () => {
         setScreenStream(null);
         setCameraActive(false); // 🆕 Matikan kamera juga saat sharing dihentikan
+        toast.info("Screen sharing stopped.", { autoClose: 1500 });
       };
     } catch (err) {
       console.error("Screen capture permission denied:", err);
-      alert("Screen capture permission denied!");
+      toast.error("Screen capture permission denied!", { autoClose: 3000 });
     }
   };
 
@@ -93,6 +100,7 @@ const HandRecognition = () => {
     if (screenStream) {
       screenStream.getTracks().forEach((track) => track.stop());
       setScreenStream(null);
+      toast.info("Screen sharing stopped.", { autoClose: 1500 });
     }
     setCameraActive(false);
   };
@@ -119,28 +127,12 @@ const HandRecognition = () => {
           <div className="d-flex flex-wrap justify-content-center align-items-start gap-4">
             <canvas
               ref={canvasRef}
-              width="800"
-              height="500"
+              width="600"
+              height="400"
               className="rounded border border-success"
               // style={{ transform: "scaleX(-1)" }}
               style={{ display: "none" }}
             />
-
-            {/* 🖼️ Gambar hasil screenshot */}
-            {imageUrl && (
-              <div>
-                <h5 className="text-light">Screenshot Result:</h5>
-                <img
-                  src={imageUrl}
-                  alt="Screenshot"
-                  width="800"
-                  height="500"
-                  className={`img-thumbnail shadow mb-3 ${
-                    pasteEffect ? "paste-animate" : ""
-                  }`}
-                />
-              </div>
-            )}
           </div>
 
           {/* 🆕 Tombol gabungan Start Detection */}
@@ -164,6 +156,21 @@ const HandRecognition = () => {
             <h4 className="text-info">Detection Result</h4>
             <p className="fs-5 mb-1">{detectedClass}</p>
             <p className="fs-6 text-secondary">Confidence: {confidence}%</p>
+            {/* 🖼️ Gambar hasil screenshot */}
+            {imageUrl && (
+              <div>
+                <h5 className="text-light">Screenshot Result:</h5>
+                <img
+                  src={imageUrl}
+                  alt="Screenshot"
+                  width="800"
+                  height="500"
+                  className={`img-thumbnail shadow mb-3 ${
+                    pasteEffect ? "paste-animate" : ""
+                  }`}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
