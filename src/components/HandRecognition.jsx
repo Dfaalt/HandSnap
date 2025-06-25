@@ -27,7 +27,7 @@ const HandRecognition = () => {
   const cameraInstance = useRef(null); // Objek kamera dan hands
   const copiedRef = useRef(false); // 🔐 Mencegah spam gesture "copy"
 
-  const labels = useMemo(() => ["copy", "paste"], []); // Daftar gesture yang dikenali
+  const labels = useMemo(() => ["SS", "transfer_SS"], []); // Daftar gesture yang dikenali
 
   // 🔄 Load model hanya sekali saat komponen mount
   useEffect(() => {

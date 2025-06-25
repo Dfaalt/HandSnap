@@ -1,8 +1,8 @@
 import { Howl } from "howler";
 
 const sounds = {
-  copy: new Howl({ src: ["/sounds/copy.wav"], volume: 1 }),
-  paste: new Howl({ src: ["/sounds/paste.wav"], volume: 1 }),
+  SS: new Howl({ src: ["/sounds/SS.wav"], volume: 1 }),
+  transfer_SS: new Howl({ src: ["/sounds/transfer_SS.wav"], volume: 1 }),
 };
 
 export const playSound = (type) => {

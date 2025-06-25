@@ -83,9 +83,9 @@ export const setupCamera = ({
           setConfidence((predictionArray[maxIndex] * 100).toFixed(2));
 
           // 🖐️ GESTURE COPY
-          if (gesture === "copy" && !copiedRef.current) {
+          if (gesture === "SS" && !copiedRef.current) {
             copiedRef.current = true; // 🔐 Kunci gesture copy agar tidak spam
-            playSound("copy"); // 🔊
+            playSound("SS"); // 🔊
 
             // 💡 Animasi flash saat screenshot
             if (setShowFlash) {
@@ -100,8 +100,8 @@ export const setupCamera = ({
           }
 
           // 📩 GESTURE PASTE
-          if (gesture === "paste" && copiedRef.current) {
-            playSound("paste"); // 🔊
+          if (gesture === "transfer_SS" && copiedRef.current) {
+            playSound("transfer_SS"); // 🔊
 
             // Ambil screenshot terakhir dan tampilkan
             fetchLastScreenshot((imageUrl) => {
