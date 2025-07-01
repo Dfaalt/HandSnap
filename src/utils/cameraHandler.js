@@ -164,8 +164,8 @@ export const setupCamera = ({
       onFrame: async () => {
         await hands.send({ image: videoRef.current });
       },
-      width: 800,
-      height: 500,
+      width: 640,
+      height: 480,
     });
 
     cam.start(); // ✅ Jalankan kamera

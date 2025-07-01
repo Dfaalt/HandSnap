@@ -24,8 +24,10 @@ const HandRecognition = () => {
   // 🔁 REFERENSI DOM dan state boolean
   const videoRef = useRef(null); // Video webcam tersembunyi
   const canvasRef = useRef(null); // Tempat menggambar deteksi tangan
+  const canvasPiPRef = useRef(null); // Canvas gabungan untuk Picture-in-Picture
   const cameraInstance = useRef(null); // Objek kamera dan hands
   const copiedRef = useRef(false); // 🔐 Mencegah spam gesture "copy"
+  const pipVideo = useRef(null); // Simpan elemen video untuk PiP
 
   const labels = useMemo(() => ["SS", "transfer_SS"], []); // Daftar gesture yang dikenali
 
@@ -57,50 +59,87 @@ const HandRecognition = () => {
     });
   }, [model, cameraActive, labels, screenStream]);
 
-  // 🎛️ Toggle kamera on/off
-  const toggleCamera = () => {
-    setCameraActive((prev) => !prev);
-  };
-
-  // 📥 Minta izin capture layar desktop
-  // 🆕 Gabungan tombol Start Detection (stream + kamera)
+  // capture layar desktop + Gabungan tombol Start Detection PiP (stream + kamera)
   const handleStartDetection = async () => {
-    // Jika stream dan kamera sudah aktif klik restart detection = refresh halaman
     if (screenStream && cameraActive) {
       window.location.reload();
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      // ambil stream kamera
+      const camStream = await navigator.mediaDevices.getUserMedia({
         video: true,
       });
-      setScreenStream(stream); // Simpan stream desktop
-      setCameraActive(true); // Langsung nyalakan kamera
-      // alert("Screen capture permission granted!");
+      videoRef.current.srcObject = camStream;
+      await videoRef.current.play();
+
+      // siapkan canvas untuk PiP
+      const canvas = canvasPiPRef.current;
+      const ctx = canvas.getContext("2d");
+      const [w, h] = [640, 480];
+      canvas.width = w;
+      canvas.height = h;
+
+      // Transformasi canvas agar M I R R O R
+      ctx.translate(w, 0); // Geser canvas ke kanan penuh
+      ctx.scale(-1, 1); // Flip horizontal (mirror)
+
+      // loop gambar webcam + landmark dari canvasref
+      const drawLoop = () => {
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(videoRef.current, 0, 0, w, h);
+        ctx.drawImage(canvasRef.current, 0, 0, w, h);
+        requestAnimationFrame(drawLoop);
+      };
+      drawLoop();
+
+      // kirim stream canvas ke Pip
+      const canvasStream = canvas.captureStream(30);
+      pipVideo.current = document.createElement("video");
+      pipVideo.current.srcObject = canvasStream;
+      await pipVideo.current.play();
+      await pipVideo.current.requestPictureInPicture();
+      toast.success("Picture-in-Picture activated!", { autoClose: 3000 });
+
+      // minta izin screen capture
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+      });
+      setScreenStream(screenStream);
+      setCameraActive(true);
+
       toast.success("Screen capture permission granted!", { autoClose: 3000 });
       toast.info(
         "🖥️ Pastikan tab ini tetap terbuka dan aktif selama gesture digunakan!",
         { autoClose: 4000 }
       );
 
-      // Reset jika user stop sharing
-      stream.getVideoTracks()[0].onended = () => {
+      screenStream.getVideoTracks()[0].onended = () => {
         setScreenStream(null);
-        setCameraActive(false); // 🆕 Matikan kamera juga saat sharing dihentikan
+        setCameraActive(false);
         toast.info("Screen sharing stopped.", { autoClose: 1500 });
       };
     } catch (err) {
-      console.error("Screen capture permission denied:", err);
+      console.error("Start Detection Failed:", err);
       toast.error("Screen capture permission denied!", { autoClose: 3000 });
     }
   };
 
-  // 🆕 Fungsi untuk menghentikan kamera dan screen stream
+  // Fungsi untuk menghentikan kamera dan screen stream
   const handleStopDetection = () => {
     if (screenStream) {
       screenStream.getTracks().forEach((track) => track.stop());
       setScreenStream(null);
       toast.info("Screen sharing stopped.", { autoClose: 1500 });
+    }
+    if (document.pictureInPictureElement) {
+      document
+        .exitPictureInPicture()
+        .catch((err) => console.warn("Keluar PiP gagal:", err));
+    }
+    if (pipVideo.current) {
+      pipVideo.current.srcObject.getTracks().forEach((t) => t.stop());
+      pipVideo.current = null;
     }
     setCameraActive(false);
   };
@@ -118,8 +157,9 @@ const HandRecognition = () => {
             ref={videoRef}
             autoPlay
             playsInline
-            width="800"
-            height="500"
+            muted
+            width="640"
+            height="480"
             style={{ display: "none" }}
           />
 
@@ -127,15 +167,19 @@ const HandRecognition = () => {
           <div className="d-flex flex-wrap justify-content-center align-items-start gap-4">
             <canvas
               ref={canvasRef}
-              width="600"
-              height="400"
+              width="640"
+              height="480"
               className="rounded border border-success"
               // style={{ transform: "scaleX(-1)" }}
               style={{ display: "none" }}
             />
+            <canvas
+              ref={canvasPiPRef} // Tambahan canvas gabungan untuk PiP
+              style={{ display: "none" }}
+            />
           </div>
 
-          {/* 🆕 Tombol gabungan Start Detection */}
+          {/* Tombol gabungan Start Detection */}
           <div className="d-flex justify-content-center gap-3 mb-3">
             <button onClick={handleStartDetection} className="btn btn-success">
               {cameraActive && screenStream
