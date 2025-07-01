@@ -24,7 +24,7 @@ export const screenshotAndUpload = async () => {
       await axios.post("http://127.0.0.1:5000/api/image", formData);
       console.log("Screenshot uploaded");
     } catch (err) {
-      console.error("Upload error:", err);
+      console.error("Upload SS error:", err);
     }
   }, "image/png");
 };
@@ -50,11 +50,11 @@ export const screenshotFromStreamAndUpload = async (screenStream) => {
         await axios.post("http://127.0.0.1:5000/api/image", formData);
         console.log("Desktop screenshot uploaded");
       } catch (err) {
-        console.error("Upload error:", err);
+        console.error("Upload SS desktop error:", err);
       }
     }, "image/png");
   } catch (err) {
-    console.error("Screen capture error:", err);
+    console.error("Screen capture desktop error:", err);
     // fallback ke screenshot halaman web
     await screenshotAndUpload();
   }
@@ -70,6 +70,6 @@ export const fetchLastScreenshot = async (setImageUrl) => {
     const imageUrl = URL.createObjectURL(blob);
     setImageUrl(imageUrl);
   } catch (err) {
-    console.error("Fetch error:", err);
+    console.error("Fetch last data error:", err);
   }
 };

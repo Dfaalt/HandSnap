@@ -82,7 +82,7 @@ export const setupCamera = ({
           setDetectedClass(`Class: ${gesture}`);
           setConfidence((predictionArray[maxIndex] * 100).toFixed(2));
 
-          // 🖐️ GESTURE COPY
+          // 🖐️ GESTURE SS
           if (gesture === "SS" && !copiedRef.current) {
             copiedRef.current = true; // 🔐 Kunci gesture copy agar tidak spam
             playSound("SS"); // 🔊
@@ -99,30 +99,44 @@ export const setupCamera = ({
               : screenshotAndUpload();
           }
 
-          // 📩 GESTURE PASTE
-          if (gesture === "transfer_SS" && copiedRef.current) {
-            playSound("transfer_SS"); // 🔊
+          // 📩 GESTURE Transfer_SS
+          // Simpan waktu terakhir transfer dilakukan
+          if (!window.lastTransferTime) window.lastTransferTime = 0;
 
-            // Ambil screenshot terakhir dan tampilkan
+          const now = Date.now();
+          const cooldown = 2000; // 2 detik cooldown
+
+          if (
+            gesture === "transfer_SS" &&
+            now - window.lastTransferTime > cooldown
+          ) {
+            window.lastTransferTime = now;
+
             fetchLastScreenshot((imageUrl) => {
-              setImageUrl(imageUrl);
+              const finalImage = imageUrl;
+              if (!finalImage) {
+                setDetectedClass("❌ Belum ada screenshot.");
+                return;
+              }
 
-              // 💡 Animasi zoom saat gambar ditampilkan
+              playSound("transfer_SS");
+              setImageUrl(finalImage);
+
               if (setPasteEffect) {
                 setPasteEffect(true);
                 setTimeout(() => setPasteEffect(false), 800);
               }
 
-              // ⬇️ Auto-download screenshot
+              // ⬇️ Auto-download
               const a = document.createElement("a");
-              a.href = imageUrl;
+              a.href = finalImage;
               a.download = "screenshot.png";
               document.body.appendChild(a);
               a.click();
               document.body.removeChild(a);
             });
 
-            copiedRef.current = false; // 🔓 Unlock gesture copy setelah paste
+            copiedRef.current = false; // unlock gesture SS
           }
         });
       } else {

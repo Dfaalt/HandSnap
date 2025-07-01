@@ -61,6 +61,7 @@ const HandRecognition = () => {
 
   // capture layar desktop + Gabungan tombol Start Detection PiP (stream + kamera)
   const handleStartDetection = async () => {
+    handleStopDetection();
     if (screenStream && cameraActive) {
       window.location.reload();
       return;
@@ -109,10 +110,10 @@ const HandRecognition = () => {
       setCameraActive(true);
 
       toast.success("Screen capture permission granted!", { autoClose: 3000 });
-      toast.info(
-        "🖥️ Pastikan tab ini tetap terbuka dan aktif selama gesture digunakan!",
-        { autoClose: 4000 }
-      );
+      // toast.info(
+      //   "🖥️ Pastikan tab ini tetap terbuka dan aktif selama gesture digunakan!",
+      //   { autoClose: 4000 }
+      // );
 
       screenStream.getVideoTracks()[0].onended = () => {
         setScreenStream(null);
@@ -142,6 +143,11 @@ const HandRecognition = () => {
       pipVideo.current = null;
     }
     setCameraActive(false);
+  };
+
+  // fungsin on/off camera
+  const toggleCamera = () => {
+    setCameraActive((prev) => !prev);
   };
 
   return (
@@ -187,11 +193,10 @@ const HandRecognition = () => {
                 : "Start Detection"}
             </button>
             <button
-              onClick={handleStopDetection}
-              className="btn btn-danger"
-              disabled={!cameraActive && !screenStream}
+              onClick={toggleCamera}
+              className={`btn ${cameraActive ? "btn-danger" : "btn-primary"}`}
             >
-              Stop Detection
+              {cameraActive ? "Stop Camera" : "Open Camera"}
             </button>
           </div>
 
