@@ -1,121 +1,131 @@
-// Komponen utama untuk mendeteksi gesture tangan dan menjalankan aksi berdasarkan model
 import React, { useEffect, useRef, useState, useMemo } from "react";
-import { playSound } from "../utils/soundManager"; // 🔊 Untuk memainkan suara
+import { playSound } from "../utils/soundManager";
 import { toast } from "react-toastify";
 import {
-  loadModel, // 🔍 Load model ML dari TensorFlow.js
-  screenshotAndUpload, // 📸 Screenshot dari halaman web
-  screenshotFromStreamAndUpload, // 📸 Screenshot dari stream layar (jika diizinkan)
-  fetchLastScreenshot, // 🖼️ Ambil screenshot terakhir dari server
+  loadModel,
+  screenshotAndUpload,
+  screenshotFromStreamAndUpload,
+  fetchLastScreenshot,
 } from "../utils/modelRestAPI";
-import { setupCamera } from "../utils/cameraHandler"; // 📷 Modularisasi kamera dan proses deteksi gesture
+import { setupCamera } from "../utils/cameraHandler";
 
 const HandRecognition = () => {
-  // 🎯 STATE utama
+  // === STATE ===
   const [model, setModel] = useState(null); // Model TensorFlow
-  const [detectedClass, setDetectedClass] = useState(""); // Hasil klasifikasi gesture
-  const [confidence, setConfidence] = useState(""); // Nilai confidence hasil prediksi
-  const [cameraActive, setCameraActive] = useState(false); // Status kamera aktif/tidak
-  const [imageUrl, setImageUrl] = useState(null); // Gambar hasil screenshot
-  const [screenStream, setScreenStream] = useState(null); // Stream desktop user
-  const [showFlash, setShowFlash] = useState(false); // Efek flash animasi saat copy
-  const [pasteEffect, setPasteEffect] = useState(false); // Efek zoom animasi saat paste
+  const [detectedClass, setDetectedClass] = useState(""); // Kelas gesture yang terdeteksi
+  const [confidence, setConfidence] = useState(""); // Persentase confidence
+  const [cameraActive, setCameraActive] = useState(false); // Status kamera
+  const [imageUrl, setImageUrl] = useState(null); // Hasil screenshot dari backend
+  const [screenStream, setScreenStream] = useState(null); // Stream dari layar (desktop sharing)
+  const [showFlash, setShowFlash] = useState(false); // Flash saat screenshot
+  const [pasteEffect, setPasteEffect] = useState(false); // Animasi paste
 
-  // 🔁 REFERENSI DOM dan state boolean
-  const videoRef = useRef(null); // Video webcam tersembunyi
-  const canvasRef = useRef(null); // Tempat menggambar deteksi tangan
-  const canvasPiPRef = useRef(null); // Canvas gabungan untuk Picture-in-Picture
-  const cameraInstance = useRef(null); // Objek kamera dan hands
-  const copiedRef = useRef(false); // 🔐 Mencegah spam gesture "copy"
-  const pipVideo = useRef(null); // Simpan elemen video untuk PiP
+  // === REF (DOM atau var persist) ===
+  const videoRef = useRef(null); // Kamera
+  const canvasRef = useRef(null); // Canvas utama untuk deteksi
+  const canvasPiPRef = useRef(null); // Canvas untuk Picture-in-Picture
+  const cameraInstance = useRef(null); // Instance kamera dari mediapipe/camera
+  const copiedRef = useRef(false); // Flag gesture sudah copy
+  const pipVideo = useRef(null); // Video element untuk PiP
 
-  const labels = useMemo(() => ["SS", "transfer_SS"], []); // Daftar gesture yang dikenali
+  // === Label gesture ===
+  const labels = useMemo(() => ["SS", "transfer_SS"], []);
 
-  // 🔄 Load model hanya sekali saat komponen mount
+  // Load model sekali saat mount
   useEffect(() => {
     loadModel(setModel);
   }, []);
 
-  // 🔁 Jalankan proses kamera jika model sudah siap dan kamera diaktifkan
+  // Setup kamera dan gesture detection saat model & kamera aktif
   useEffect(() => {
     setupCamera({
-      cameraActive, // Status kamera aktif
-      setDetectedClass, // Setter class gesture
-      setConfidence, // Setter confidence
-      setImageUrl, // Setter gambar hasil
-      videoRef, // Referensi DOM video
-      canvasRef, // Referensi DOM canvas
-      cameraInstance, // Ref instance kamera
-      copiedRef, // Ref boolean mencegah spam
-      model, // Model TensorFlow
-      labels, // Label gesture
-      screenStream, // Stream desktop jika tersedia
-      playSound, // Fungsi suara
-      screenshotAndUpload, // Screenshot dari halaman
-      screenshotFromStreamAndUpload, // Screenshot dari desktop
-      fetchLastScreenshot, // Ambil gambar terakhir dari server
-      setShowFlash, // Efek flash (copy)
-      setPasteEffect, // Efek zoom gambar (paste)
+      cameraActive,
+      setDetectedClass,
+      setConfidence,
+      setImageUrl,
+      videoRef,
+      canvasRef,
+      cameraInstance,
+      copiedRef,
+      model,
+      labels,
+      screenStream,
+      playSound,
+      screenshotAndUpload,
+      screenshotFromStreamAndUpload,
+      fetchLastScreenshot,
+      setShowFlash,
+      setPasteEffect,
     });
   }, [model, cameraActive, labels, screenStream]);
 
-  // capture layar desktop + Gabungan tombol Start Detection PiP (stream + kamera)
+  // Gambar mirror (flip horizontal) ke canvasPiP agar tampil di PiP
+  const drawMirrorCanvasToPiP = () => {
+    const canvas = canvasPiPRef.current;
+    const ctx = canvas.getContext("2d");
+    const [w, h] = [640, 480];
+    canvas.width = w;
+    canvas.height = h;
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+
+    const drawLoop = () => {
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(videoRef.current, 0, 0, w, h);
+      ctx.drawImage(canvasRef.current, 0, 0, w, h);
+      requestAnimationFrame(drawLoop); // Looping terus-menerus
+    };
+    drawLoop();
+  };
+
+  // Aktifkan fitur Picture-in-Picture
+  const activatePictureInPicture = async () => {
+    const canvasStream = canvasPiPRef.current.captureStream(30);
+    pipVideo.current = document.createElement("video");
+    pipVideo.current.srcObject = canvasStream;
+    await pipVideo.current.play();
+
+    try {
+      await pipVideo.current.requestPictureInPicture();
+      toast.success("Picture-in-Picture activated!", { autoClose: 3000 });
+    } catch (error) {
+      console.error("❌ Failed to activate PiP:", error);
+      toast.error("Gagal mengaktifkan Picture-in-Picture!", {
+        autoClose: 3000,
+      });
+    }
+  };
+
+  // Fungsi untuk mulai deteksi kamera + layar
   const handleStartDetection = async () => {
-    handleStopDetection();
+    handleStopDetection(); // Stop dulu kalau sebelumnya aktif
+
     if (screenStream && cameraActive) {
-      window.location.reload();
+      window.location.reload(); // Reset deteksi jika aktif dua-duanya
       return;
     }
+
     try {
-      // ambil stream kamera
+      // Minta izin kamera
       const camStream = await navigator.mediaDevices.getUserMedia({
         video: true,
       });
       videoRef.current.srcObject = camStream;
       await videoRef.current.play();
 
-      // siapkan canvas untuk PiP
-      const canvas = canvasPiPRef.current;
-      const ctx = canvas.getContext("2d");
-      const [w, h] = [640, 480];
-      canvas.width = w;
-      canvas.height = h;
+      drawMirrorCanvasToPiP();
+      await activatePictureInPicture(); // Aktifkan PiP
 
-      // Transformasi canvas agar M I R R O R
-      ctx.translate(w, 0); // Geser canvas ke kanan penuh
-      ctx.scale(-1, 1); // Flip horizontal (mirror)
-
-      // loop gambar webcam + landmark dari canvasref
-      const drawLoop = () => {
-        ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(videoRef.current, 0, 0, w, h);
-        ctx.drawImage(canvasRef.current, 0, 0, w, h);
-        requestAnimationFrame(drawLoop);
-      };
-      drawLoop();
-
-      // kirim stream canvas ke Pip
-      const canvasStream = canvas.captureStream(30);
-      pipVideo.current = document.createElement("video");
-      pipVideo.current.srcObject = canvasStream;
-      await pipVideo.current.play();
-      await pipVideo.current.requestPictureInPicture();
-      toast.success("Picture-in-Picture activated!", { autoClose: 3000 });
-
-      // minta izin screen capture
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+      // Minta izin share screen
+      const screen = await navigator.mediaDevices.getDisplayMedia({
         video: true,
       });
-      setScreenStream(screenStream);
+      setScreenStream(screen);
       setCameraActive(true);
-
       toast.success("Screen capture permission granted!", { autoClose: 3000 });
-      // toast.info(
-      //   "🖥️ Pastikan tab ini tetap terbuka dan aktif selama gesture digunakan!",
-      //   { autoClose: 4000 }
-      // );
 
-      screenStream.getVideoTracks()[0].onended = () => {
+      // Deteksi jika user menghentikan screen share manual
+      screen.getVideoTracks()[0].onended = () => {
         setScreenStream(null);
         setCameraActive(false);
         toast.info("Screen sharing stopped.", { autoClose: 1500 });
@@ -126,39 +136,50 @@ const HandRecognition = () => {
     }
   };
 
-  // Fungsi untuk menghentikan kamera dan screen stream
+  // Fungsi untuk memberhentikan semua stream
   const handleStopDetection = () => {
     if (screenStream) {
       screenStream.getTracks().forEach((track) => track.stop());
       setScreenStream(null);
       toast.info("Screen sharing stopped.", { autoClose: 1500 });
     }
+
     if (document.pictureInPictureElement) {
       document
         .exitPictureInPicture()
         .catch((err) => console.warn("Keluar PiP gagal:", err));
     }
+
     if (pipVideo.current) {
       pipVideo.current.srcObject.getTracks().forEach((t) => t.stop());
       pipVideo.current = null;
     }
+
     setCameraActive(false);
   };
 
-  // fungsin on/off camera
+  // Toggle kamera saja, tanpa share screen
   const toggleCamera = () => {
-    setCameraActive((prev) => !prev);
+    setCameraActive((prev) => {
+      const newState = !prev;
+      toast.dismiss(); // Tutup semua toast sebelumnya
+
+      if (newState) {
+        toast.success("Camera started", { autoClose: 1500 });
+      } else {
+        toast.info("Camera stopped", { autoClose: 1500 });
+      }
+
+      return newState;
+    });
   };
 
   return (
     <div className="container-fluid flex-fill px-3">
-      {/* 🔦 Overlay flash animasi saat gesture "copy" */}
       {showFlash && <div className="flash-overlay" />}
-
-      {/* 🧾 Area hasil dan tampilan kamera */}
       <div className="card bg-dark text-white shadow border-light mb-5">
         <div className="card-body px-4 py-4">
-          {/* 📹 Elemen video tersembunyi untuk MediaPipe */}
+          {/* Video dari kamera (tidak ditampilkan langsung) */}
           <video
             ref={videoRef}
             autoPlay
@@ -169,23 +190,18 @@ const HandRecognition = () => {
             style={{ display: "none" }}
           />
 
-          {/* 🎨 Canvas dan hasil screenshot */}
+          {/* Canvas untuk gambar kamera dan PiP */}
           <div className="d-flex flex-wrap justify-content-center align-items-start gap-4">
             <canvas
               ref={canvasRef}
               width="640"
               height="480"
-              className="rounded border border-success"
-              // style={{ transform: "scaleX(-1)" }}
               style={{ display: "none" }}
             />
-            <canvas
-              ref={canvasPiPRef} // Tambahan canvas gabungan untuk PiP
-              style={{ display: "none" }}
-            />
+            <canvas ref={canvasPiPRef} style={{ display: "none" }} />
           </div>
 
-          {/* Tombol gabungan Start Detection */}
+          {/* Tombol kontrol */}
           <div className="d-flex justify-content-center gap-3 mb-3">
             <button onClick={handleStartDetection} className="btn btn-success">
               {cameraActive && screenStream
@@ -200,12 +216,11 @@ const HandRecognition = () => {
             </button>
           </div>
 
-          {/* 📊 Deteksi Gesture */}
+          {/* Hasil deteksi dan screenshot */}
           <div className="mt-2 text-center">
             <h4 className="text-info">Detection Result</h4>
             <p className="fs-5 mb-1">{detectedClass}</p>
             <p className="fs-6 text-secondary">Confidence: {confidence}%</p>
-            {/* 🖼️ Gambar hasil screenshot */}
             {imageUrl && (
               <div>
                 <h5 className="text-light">Screenshot Result:</h5>

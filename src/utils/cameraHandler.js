@@ -1,32 +1,103 @@
-// ✅ NEW: Tambahan untuk kamera + animasi gesture copy/paste
-import { Hands, HAND_CONNECTIONS } from "@mediapipe/hands"; // MediaPipe untuk deteksi tangan
-import { Camera } from "@mediapipe/camera_utils"; // Utilitas kamera dari MediaPipe
-import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils"; // Untuk menggambar titik tangan di canvas
-import * as tf from "@tensorflow/tfjs"; // TensorFlow.js untuk prediksi gesture
+import { Hands, HAND_CONNECTIONS } from "@mediapipe/hands";
+import { Camera } from "@mediapipe/camera_utils";
+import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
+import * as tf from "@tensorflow/tfjs";
 
-/**
- * Setup kamera dan proses deteksi gesture tangan.
- * Dipanggil saat kamera diaktifkan & model sudah siap.
- *
- * @param {object} config - Konfigurasi setup.
- * @param {boolean} config.cameraActive - Status kamera aktif/tidak.
- * @param {function} config.setDetectedClass - Setter nama gesture yang terdeteksi.
- * @param {function} config.setConfidence - Setter confidence hasil prediksi.
- * @param {function} config.setImageUrl - Setter URL screenshot hasil paste.
- * @param {object} config.videoRef - Referensi ke elemen <video>.
- * @param {object} config.canvasRef - Referensi ke elemen <canvas>.
- * @param {object} config.cameraInstance - Ref untuk menyimpan kamera agar bisa stop saat tidak aktif.
- * @param {object} config.copiedRef - Ref boolean anti-spam untuk gesture "copy".
- * @param {object} config.model - Model TensorFlow untuk deteksi gesture.
- * @param {array} config.labels - Array label yang dikenali (misal: ["copy", "paste"]).
- * @param {object} config.screenStream - Stream dari layar (jika ada).
- * @param {function} config.playSound - Fungsi untuk memainkan suara.
- * @param {function} config.screenshotAndUpload - Fungsi screenshot biasa (pakai html2canvas).
- * @param {function} config.screenshotFromStreamAndUpload - Fungsi screenshot dari layar desktop.
- * @param {function} config.fetchLastScreenshot - Fungsi ambil gambar terakhir dari server.
- * @param {function} config.setShowFlash - (Opsional) Efek animasi flash saat copy.
- * @param {function} config.setPasteEffect - (Opsional) Efek animasi zoom saat paste.
- */
+// 🎯 Fungsi untuk menggambar hasil deteksi ke canvas output
+const drawResultsToCanvas = (results, canvasRef) => {
+  const canvas = canvasRef.current;
+  const ctx = canvas.getContext("2d");
+
+  ctx.save(); // Simpan state canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height); // Bersihkan canvas
+  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height); // Tampilkan kamera
+
+  // Gambar landmark tangan jika ada
+  if (results.multiHandLandmarks) {
+    results.multiHandLandmarks.forEach((landmarks) => {
+      drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {
+        color: "#00FF00",
+        lineWidth: 2,
+      });
+      drawLandmarks(ctx, landmarks, {
+        color: "#FF0000",
+        lineWidth: 1,
+      });
+    });
+  }
+
+  ctx.restore(); // Kembalikan state canvas
+};
+
+// ✌️ Tangani gesture "SS" (screenshot)
+const handleGestureSS = ({
+  playSound,
+  setShowFlash,
+  screenStream,
+  screenshotAndUpload,
+  screenshotFromStreamAndUpload,
+  copiedRef,
+}) => {
+  copiedRef.current = true; // Hindari multiple trigger
+  playSound("SS");
+
+  // Tampilkan animasi flash
+  if (setShowFlash) {
+    setShowFlash(true);
+    setTimeout(() => setShowFlash(false), 400);
+  }
+
+  // Jika screen stream aktif, ambil screenshot dari stream
+  screenStream
+    ? screenshotFromStreamAndUpload(screenStream)
+    : screenshotAndUpload();
+};
+
+// 🖐 Tangani gesture "transfer_SS" (paste + download)
+const handleGestureTransfer = ({
+  fetchLastScreenshot,
+  playSound,
+  setImageUrl,
+  setPasteEffect,
+  setDetectedClass,
+  copiedRef,
+}) => {
+  // Batasi frekuensi gesture ini agar tidak spam
+  if (!window.lastTransferTime) window.lastTransferTime = 0;
+  const now = Date.now();
+  const cooldown = 2500;
+  if (now - window.lastTransferTime < cooldown) return;
+  window.lastTransferTime = now;
+
+  // Ambil screenshot terakhir dari server
+  fetchLastScreenshot((imageUrl) => {
+    if (!imageUrl) {
+      setDetectedClass("❌ Belum ada screenshot.");
+      return;
+    }
+
+    playSound("transfer_SS");
+    setImageUrl(imageUrl);
+
+    // Aktifkan animasi paste
+    if (setPasteEffect) {
+      setPasteEffect(true);
+      setTimeout(() => setPasteEffect(false), 800);
+    }
+
+    // Unduh gambar secara otomatis
+    const a = document.createElement("a");
+    a.href = imageUrl;
+    a.download = "screenshot.png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
+  copiedRef.current = false; // Reset agar bisa screenshot lagi
+};
+
+// 🎥 Fungsi utama untuk mengatur kamera dan deteksi tangan
 export const setupCamera = ({
   cameraActive,
   setDetectedClass,
@@ -46,16 +117,16 @@ export const setupCamera = ({
   setShowFlash,
   setPasteEffect,
 }) => {
-  if (!model) return; // ⛔ Jangan lanjut jika model belum ready
+  if (!model) return; // Model belum siap
 
-  // Jika kamera aktif dan belum ada instance kamera berjalan
+  // ✅ Start kamera jika aktif dan belum jalan
   if (cameraActive && !cameraInstance.current) {
+    // Inisialisasi MediaPipe Hands
     const hands = new Hands({
       locateFile: (file) =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`, // CDN file MediaPipe
+        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
     });
 
-    // Konfigurasi MediaPipe Hands
     hands.setOptions({
       maxNumHands: 2,
       modelComplexity: 1,
@@ -63,117 +134,59 @@ export const setupCamera = ({
       minTrackingConfidence: 0.7,
     });
 
-    // Callback saat hasil tangan tersedia
+    // Callback setiap kali hasil deteksi tersedia
     hands.onResults((results) => {
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        // Ambil titik tangan pertama
-        const landmarks = results.multiHandLandmarks[0];
+      const landmarks = results.multiHandLandmarks?.[0];
 
-        // Ubah titik jadi array 1D dan buat tensor
+      if (landmarks) {
+        // Siapkan data untuk prediksi model LSTM
         const inputData = landmarks.flatMap((lm) => [lm.x, lm.y]);
         const tensor = tf.tensor(inputData).reshape([1, 1, 42]);
-        const prediction = model.predict(tensor); // 🔍 Prediksi gesture
 
-        prediction.data().then((predictionArray) => {
-          const maxIndex = predictionArray.indexOf(
-            Math.max(...predictionArray)
-          );
+        const prediction = model.predict(tensor);
+
+        prediction.data().then((predArr) => {
+          const maxIndex = predArr.indexOf(Math.max(...predArr));
           const gesture = labels[maxIndex];
+          const confidence = (predArr[maxIndex] * 100).toFixed(2);
+
           setDetectedClass(`Class: ${gesture}`);
-          setConfidence((predictionArray[maxIndex] * 100).toFixed(2));
+          setConfidence(confidence);
 
-          // 🖐️ GESTURE SS
+          // Tangani gesture sesuai prediksi
           if (gesture === "SS" && !copiedRef.current) {
-            copiedRef.current = true; // 🔐 Kunci gesture copy agar tidak spam
-            playSound("SS"); // 🔊
-
-            // 💡 Animasi flash saat screenshot
-            if (setShowFlash) {
-              setShowFlash(true);
-              setTimeout(() => setShowFlash(false), 400);
-            }
-
-            // 📸 Screenshot layar atau elemen
-            screenStream
-              ? screenshotFromStreamAndUpload(screenStream)
-              : screenshotAndUpload();
+            handleGestureSS({
+              playSound,
+              setShowFlash,
+              screenStream,
+              screenshotAndUpload,
+              screenshotFromStreamAndUpload,
+              copiedRef,
+            });
           }
 
-          // 📩 GESTURE Transfer_SS
-          // Simpan waktu terakhir transfer dilakukan
-          if (!window.lastTransferTime) window.lastTransferTime = 0;
-
-          const now = Date.now();
-          const cooldown = 2000; // 2 detik cooldown
-
-          if (
-            gesture === "transfer_SS" &&
-            now - window.lastTransferTime > cooldown
-          ) {
-            window.lastTransferTime = now;
-
-            fetchLastScreenshot((imageUrl) => {
-              const finalImage = imageUrl;
-              if (!finalImage) {
-                setDetectedClass("❌ Belum ada screenshot.");
-                return;
-              }
-
-              playSound("transfer_SS");
-              setImageUrl(finalImage);
-
-              if (setPasteEffect) {
-                setPasteEffect(true);
-                setTimeout(() => setPasteEffect(false), 800);
-              }
-
-              // ⬇️ Auto-download
-              const a = document.createElement("a");
-              a.href = finalImage;
-              a.download = "screenshot.png";
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
+          if (gesture === "transfer_SS") {
+            handleGestureTransfer({
+              fetchLastScreenshot,
+              playSound,
+              setImageUrl,
+              setPasteEffect,
+              setDetectedClass,
+              copiedRef,
             });
-
-            copiedRef.current = false; // unlock gesture SS
           }
         });
       } else {
+        // Tidak ada tangan terdeteksi
         setDetectedClass("No hand detected");
         setConfidence("");
       }
 
-      // ✍️ Gambar hasil tangan ke canvas
-      const canvasElement = canvasRef.current;
-      const canvasCtx = canvasElement.getContext("2d");
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(
-        results.image,
-        0,
-        0,
-        canvasElement.width,
-        canvasElement.height
-      );
-
-      if (results.multiHandLandmarks) {
-        for (const landmarks of results.multiHandLandmarks) {
-          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {
-            color: "#00FF00",
-            lineWidth: 2,
-          });
-          drawLandmarks(canvasCtx, landmarks, {
-            color: "#FF0000",
-            lineWidth: 1,
-          });
-        }
-      }
-
-      canvasCtx.restore();
+      // Gambar ke canvas deteksi
+      drawResultsToCanvas(results, canvasRef);
     });
 
-    // 🎥 Setup kamera dan hubungkan dengan MediaPipe
+    // 🔁 Jalankan kamera
     const cam = new Camera(videoRef.current, {
       onFrame: async () => {
         await hands.send({ image: videoRef.current });
@@ -182,13 +195,13 @@ export const setupCamera = ({
       height: 480,
     });
 
-    cam.start(); // ✅ Jalankan kamera
-    cameraInstance.current = { cam, hands }; // Simpan instance agar bisa stop nanti
+    cam.start();
+    cameraInstance.current = { cam, hands }; // Simpan instance kamera
   }
 
-  // 🔴 Stop kamera saat tidak aktif
+  // 🛑 Hentikan kamera jika tidak aktif
   if (!cameraActive && cameraInstance.current) {
-    cameraInstance.current.cam.stop();
+    cameraInstance.current.cam.stop(); // Stop MediaPipe camera
     cameraInstance.current = null;
   }
 };

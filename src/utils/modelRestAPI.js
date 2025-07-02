@@ -2,74 +2,100 @@ import html2canvas from "html2canvas";
 import axios from "axios";
 import * as tf from "@tensorflow/tfjs";
 
-//panggil model
+/**
+ * 🧠 Memuat model TensorFlow dari direktori /model di public folder
+ * @param {function} setModel - Fungsi setter React untuk menyimpan model ke state
+ */
 export const loadModel = async (setModel) => {
   try {
-    const model = await tf.loadLayersModel("/model/model.json");
-    setModel(model);
-    console.log("Model loaded!");
+    const model = await tf.loadLayersModel("/model/model.json"); // Load model .json dari folder public
+    setModel(model); // Simpan model ke state
+    console.log("✅ Model loaded!");
   } catch (err) {
-    console.error("Model load error:", err);
+    console.error("❌ Failed to load model:", err);
   }
 };
 
-//post screenshot dg gesture langsung ke db
+/**
+ * 📸 Mengambil screenshot dari seluruh halaman dan mengunggahnya ke server
+ */
 export const screenshotAndUpload = async () => {
-  const element = document.body;
-  const canvas = await html2canvas(element);
-  canvas.toBlob(async (blob) => {
-    const formData = new FormData();
-    formData.append("file", blob, "screenshot.png");
-    try {
-      await axios.post("http://127.0.0.1:5000/api/image", formData);
-      console.log("Screenshot uploaded");
-    } catch (err) {
-      console.error("Upload SS error:", err);
-    }
-  }, "image/png");
+  try {
+    const canvas = await html2canvas(document.body); // Render halaman sebagai canvas
+    canvas.toBlob(async (blob) => {
+      if (!blob) throw new Error("Blob tidak tersedia");
+      await uploadImage(blob, "screenshot.png"); // Upload ke server Flask
+      console.log("✅ Screenshot uploaded");
+    }, "image/png");
+  } catch (err) {
+    console.error("❌ Screenshot capture error:", err);
+  }
 };
 
-// Fungsi screenshot desktop berdasarkan stream/share screen page yang sudah didapat
+/**
+ * 🖥 Mengambil screenshot dari layar desktop (stream) dan mengunggahnya
+ * @param {MediaStream} screenStream - Stream dari getDisplayMedia()
+ */
 export const screenshotFromStreamAndUpload = async (screenStream) => {
   try {
     if (!screenStream) throw new Error("No screen stream provided");
-    const track = screenStream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(track);
-    const bitmap = await imageCapture.grabFrame();
 
+    const track = screenStream.getVideoTracks()[0]; // Ambil track video dari stream
+    const imageCapture = new ImageCapture(track);
+    const bitmap = await imageCapture.grabFrame(); // Tangkap frame dari layar
+
+    // Buat canvas baru dengan ukuran bitmap
     const canvas = document.createElement("canvas");
     canvas.width = bitmap.width;
     canvas.height = bitmap.height;
+
     const ctx = canvas.getContext("2d");
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0); // Gambar bitmap ke canvas
 
     canvas.toBlob(async (blob) => {
-      const formData = new FormData();
-      formData.append("file", blob, "screenshot-desktop.png");
-      try {
-        await axios.post("http://127.0.0.1:5000/api/image", formData);
-        console.log("Desktop screenshot uploaded");
-      } catch (err) {
-        console.error("Upload SS desktop error:", err);
-      }
+      if (!blob) throw new Error("Blob tidak tersedia");
+      await uploadImage(blob, "screenshot-desktop.png"); // Upload ke server
+      console.log("✅ Desktop screenshot uploaded");
     }, "image/png");
   } catch (err) {
-    console.error("Screen capture desktop error:", err);
-    // fallback ke screenshot halaman web
-    await screenshotAndUpload();
+    console.error("❌ Desktop capture error:", err);
+    console.warn("🔁 Falling back to webpage screenshot...");
+    await screenshotAndUpload(); // Fallback ke html2canvas jika gagal
   }
 };
 
-//fungsi untuk menampilkan hasil hand gesture terbaru
+/**
+ * 🖼 Mengambil screenshot terakhir dari server dan mengubahnya ke URL object untuk ditampilkan
+ * @param {function} setImageUrl - Setter React untuk menyimpan URL blob ke state
+ */
 export const fetchLastScreenshot = async (setImageUrl) => {
   try {
     const res = await axios.get("http://127.0.0.1:5000/api/image/last");
-    const hex = res.data.image_data;
+    const hex = res.data.image_data; // Data dari Flask berupa string heksadesimal
+
+    // Konversi hex string ke array byte
     const binary = hex.match(/.{1,2}/g).map((byte) => parseInt(byte, 16));
     const blob = new Blob([new Uint8Array(binary)], { type: "image/png" });
-    const imageUrl = URL.createObjectURL(blob);
-    setImageUrl(imageUrl);
+
+    const imageUrl = URL.createObjectURL(blob); // Buat URL sementara dari blob
+    setImageUrl(imageUrl); // Simpan ke state React
   } catch (err) {
-    console.error("Fetch last data error:", err);
+    console.error("❌ Failed to fetch last screenshot:", err);
+  }
+};
+
+/**
+ * 📤 Utilitas untuk mengunggah file gambar ke endpoint Flask
+ * @param {Blob} blob - Objek blob gambar
+ * @param {string} filename - Nama file untuk dikirimkan ke server
+ */
+const uploadImage = async (blob, filename) => {
+  const formData = new FormData();
+  formData.append("file", blob, filename); // Siapkan form multipart/form-data
+
+  try {
+    await axios.post("http://127.0.0.1:5000/api/image", formData); // POST ke Flask API
+  } catch (err) {
+    throw new Error("❌ Upload error: " + err.message);
   }
 };
