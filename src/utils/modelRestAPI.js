@@ -1,5 +1,5 @@
-import html2canvas from "html2canvas";
 import axios from "axios";
+import { toast } from "react-toastify";
 import * as tf from "@tensorflow/tfjs";
 
 /**
@@ -13,22 +13,6 @@ export const loadModel = async (setModel) => {
     console.log("✅ Model loaded!");
   } catch (err) {
     console.error("❌ Failed to load model:", err);
-  }
-};
-
-/**
- * 📸 Mengambil screenshot dari seluruh halaman dan mengunggahnya ke server
- */
-export const screenshotAndUpload = async () => {
-  try {
-    const canvas = await html2canvas(document.body); // Render halaman sebagai canvas
-    canvas.toBlob(async (blob) => {
-      if (!blob) throw new Error("Blob tidak tersedia");
-      await uploadImage(blob, "screenshot.png"); // Upload ke server Flask
-      console.log("✅ Screenshot uploaded");
-    }, "image/png");
-  } catch (err) {
-    console.error("❌ Screenshot capture error:", err);
   }
 };
 
@@ -58,9 +42,8 @@ export const screenshotFromStreamAndUpload = async (screenStream) => {
       console.log("✅ Desktop screenshot uploaded");
     }, "image/png");
   } catch (err) {
-    console.error("❌ Desktop capture error:", err);
-    console.warn("🔁 Falling back to webpage screenshot...");
-    await screenshotAndUpload(); // Fallback ke html2canvas jika gagal
+    console.warn("⚠️ Tidak dapat mengambil screenshot dari screen stream.");
+    toast.error("Gagal mengambil screenshot dari layar.", { autoClose: 3000 });
   }
 };
 

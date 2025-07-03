@@ -34,7 +34,6 @@ const handleGestureSS = ({
   playSound,
   setShowFlash,
   screenStream,
-  screenshotAndUpload,
   screenshotFromStreamAndUpload,
   copiedRef,
 }) => {
@@ -48,9 +47,13 @@ const handleGestureSS = ({
   }
 
   // Jika screen stream aktif, ambil screenshot dari stream
-  screenStream
-    ? screenshotFromStreamAndUpload(screenStream)
-    : screenshotAndUpload();
+  if (screenStream) {
+    screenshotFromStreamAndUpload(screenStream);
+  } else {
+    console.warn(
+      "❌ screenStream tidak tersedia, tidak dapat mengambil screenshot."
+    );
+  }
 };
 
 // 🖐 Tangani gesture "transfer_SS" (paste + download)
@@ -111,7 +114,6 @@ export const setupCamera = ({
   labels,
   screenStream,
   playSound,
-  screenshotAndUpload,
   screenshotFromStreamAndUpload,
   fetchLastScreenshot,
   setShowFlash,
@@ -140,8 +142,8 @@ export const setupCamera = ({
 
       if (landmarks) {
         // Siapkan data untuk prediksi model LSTM
-        const inputData = landmarks.flatMap((lm) => [lm.x, lm.y]);
-        const tensor = tf.tensor(inputData).reshape([1, 1, 42]);
+        const inputData = landmarks.flatMap((lm) => [lm.x, lm.y, lm.z]);
+        const tensor = tf.tensor(inputData).reshape([1, 1, 63]);
 
         const prediction = model.predict(tensor);
 
@@ -159,7 +161,6 @@ export const setupCamera = ({
               playSound,
               setShowFlash,
               screenStream,
-              screenshotAndUpload,
               screenshotFromStreamAndUpload,
               copiedRef,
             });

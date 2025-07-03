@@ -3,7 +3,6 @@ import { playSound } from "../utils/soundManager";
 import { toast } from "react-toastify";
 import {
   loadModel,
-  screenshotAndUpload,
   screenshotFromStreamAndUpload,
   fetchLastScreenshot,
 } from "../utils/modelRestAPI";
@@ -51,7 +50,6 @@ const HandRecognition = () => {
       labels,
       screenStream,
       playSound,
-      screenshotAndUpload,
       screenshotFromStreamAndUpload,
       fetchLastScreenshot,
       setShowFlash,
