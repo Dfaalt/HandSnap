@@ -130,6 +130,7 @@ const HandRecognition = () => {
       };
     } catch (err) {
       console.error("Start Detection Failed:", err);
+      handleStopDetection();
       toast.error("Screen capture permission denied!", { autoClose: 3000 });
     }
   };
@@ -139,13 +140,17 @@ const HandRecognition = () => {
     if (screenStream) {
       screenStream.getTracks().forEach((track) => track.stop());
       setScreenStream(null);
-      toast.info("Screen sharing stopped.", { autoClose: 1500 });
     }
 
     if (document.pictureInPictureElement) {
       document
         .exitPictureInPicture()
         .catch((err) => console.warn("Keluar PiP gagal:", err));
+    }
+
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
+      videoRef.current.srcObject = null;
     }
 
     if (pipVideo.current) {

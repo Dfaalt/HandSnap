@@ -95,9 +95,10 @@ const handleGestureTransfer = ({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  });
 
-  copiedRef.current = false; // Reset agar bisa screenshot lagi
+    window.lastTransferTime = Date.now();
+    copiedRef.current = false; // Reset agar bisa screenshot lagi
+  });
 };
 
 // 🎥 Fungsi utama untuk mengatur kamera dan deteksi tangan
