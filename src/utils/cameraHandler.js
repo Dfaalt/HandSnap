@@ -131,7 +131,7 @@ export const setupCamera = ({
     });
 
     hands.setOptions({
-      maxNumHands: 2,
+      maxNumHands: 1,
       modelComplexity: 1,
       minDetectionConfidence: 0.7,
       minTrackingConfidence: 0.7,
@@ -143,10 +143,11 @@ export const setupCamera = ({
 
       if (landmarks) {
         // Siapkan data untuk prediksi model LSTM
-        const inputData = landmarks.flatMap((lm) => [lm.x, lm.y, lm.z]);
-        const tensor = tf.tensor(inputData).reshape([1, 1, 63]);
-
-        const prediction = model.predict(tensor);
+        const prediction = tf.tidy(() => {
+          const inputData = landmarks.flatMap((lm) => [lm.x, lm.y, lm.z]);
+          const tensor = tf.tensor(inputData).reshape([1, 1, 63]);
+          return model.predict(tensor);
+        });
 
         prediction.data().then((predArr) => {
           const maxIndex = predArr.indexOf(Math.max(...predArr));

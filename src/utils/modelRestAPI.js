@@ -53,7 +53,7 @@ export const screenshotFromStreamAndUpload = async (screenStream) => {
  */
 export const fetchLastScreenshot = async (setImageUrl) => {
   try {
-    const res = await axios.get("http://127.0.0.1:5000/api/image/last");
+    const res = await axios.get("http://127.0.0.1:5000/api/image/latest");
     const hex = res.data.image_data; // Data dari Flask berupa string heksadesimal
 
     // Konversi hex string ke array byte
@@ -77,7 +77,7 @@ const uploadImage = async (blob, filename) => {
   formData.append("file", blob, filename); // Siapkan form multipart/form-data
 
   try {
-    await axios.post("http://127.0.0.1:5000/api/image", formData); // POST ke Flask API
+    await axios.post("http://127.0.0.1:5000/api/image/upload", formData); // POST ke Flask API
   } catch (err) {
     throw new Error("❌ Upload error: " + err.message);
   }

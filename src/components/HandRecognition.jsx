@@ -94,14 +94,23 @@ const HandRecognition = () => {
     }
   };
 
+  // Reset semua state saat klik restart detection
+  const resetAllStates = () => {
+    copiedRef.current = false; // Reset flag gesture copy
+    setDetectedClass(""); // Kosongkan hasil deteksi
+    setConfidence(""); // Reset confidence
+    setImageUrl(null); // Kosongkan gambar screenshot
+    setShowFlash(false); // Hilangkan flash
+    setPasteEffect(false); // Reset efek paste
+  };
+
   // Fungsi untuk mulai deteksi kamera + layar
   const handleStartDetection = async () => {
     handleStopDetection(); // Stop dulu kalau sebelumnya aktif
 
-    if (screenStream && cameraActive) {
-      window.location.reload(); // Reset deteksi jika aktif dua-duanya
-      return;
-    }
+    await new Promise((resolve) => setTimeout(resolve, 300)); // Delay sebentar
+
+    resetAllStates(); // Reset semua state yang penting
 
     try {
       // Minta izin kamera
@@ -170,13 +179,16 @@ const HandRecognition = () => {
       if (newState) {
         toast.success("Camera started", { autoClose: 1500 });
       } else {
-        toast.info("Camera stopped", { autoClose: 1500 });
+        toast.info("Detection stopped", { autoClose: 1000 });
+        handleStopDetection();
+        setTimeout(() => {
+          window.location.reload(); // 🔁 Refresh halaman total
+        }, 1000); // Tunggu toast selesai
       }
 
       return newState;
     });
   };
-
   return (
     <div className="container-fluid flex-fill px-3">
       {showFlash && <div className="flash-overlay" />}
@@ -215,7 +227,7 @@ const HandRecognition = () => {
               onClick={toggleCamera}
               className={`btn ${cameraActive ? "btn-danger" : "btn-primary"}`}
             >
-              {cameraActive ? "Stop Camera" : "Open Camera"}
+              {cameraActive ? "Stop Detection" : "Open Camera"}
             </button>
           </div>
 
