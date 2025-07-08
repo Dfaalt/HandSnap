@@ -2,6 +2,7 @@ import { Hands, HAND_CONNECTIONS } from "@mediapipe/hands";
 import { Camera } from "@mediapipe/camera_utils";
 import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
 import * as tf from "@tensorflow/tfjs";
+import { toast } from "react-toastify";
 
 // 🎯 Fungsi untuk menggambar hasil deteksi ke canvas output
 const drawResultsToCanvas = (results, canvasRef) => {
@@ -53,6 +54,13 @@ const handleGestureSS = ({
     console.warn(
       "❌ screenStream tidak tersedia, tidak dapat mengambil screenshot."
     );
+    toast.warn(
+      "Enable screen share by clicking 'Start Detection' to take a screenshot!",
+      {
+        autoClose: 3000,
+        position: "top-center",
+      }
+    );
   }
 };
 
@@ -89,12 +97,14 @@ const handleGestureTransfer = ({
     }
 
     // Unduh gambar secara otomatis
-    const a = document.createElement("a");
-    a.href = imageUrl;
-    a.download = "screenshot.png";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    setTimeout(() => {
+      const a = document.createElement("a");
+      a.href = imageUrl;
+      a.download = "screenshot.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }, 500); // Delay 500ms sebelum download
 
     window.lastTransferTime = Date.now();
     copiedRef.current = false; // Reset agar bisa screenshot lagi
@@ -109,6 +119,8 @@ export const setupCamera = ({
   setImageUrl,
   videoRef,
   canvasRef,
+  handPresenceRef,
+  frameCounterRef,
   cameraInstance,
   copiedRef,
   model,
@@ -142,50 +154,63 @@ export const setupCamera = ({
       const landmarks = results.multiHandLandmarks?.[0];
 
       if (landmarks) {
-        // Siapkan data untuk prediksi model LSTM
-        const prediction = tf.tidy(() => {
-          const inputData = landmarks.flatMap((lm) => [lm.x, lm.y, lm.z]);
-          const tensor = tf.tensor(inputData).reshape([1, 1, 63]);
-          return model.predict(tensor);
-        });
+        // Tambah counter jika tangan terdeteksi
+        frameCounterRef.current++;
+        if (frameCounterRef.current >= 5) {
+          handPresenceRef.current = true;
+        }
 
-        prediction.data().then((predArr) => {
-          const maxIndex = predArr.indexOf(Math.max(...predArr));
-          const gesture = labels[maxIndex];
-          const confidence = (predArr[maxIndex] * 100).toFixed(2);
+        if (handPresenceRef.current) {
+          const prediction = tf.tidy(() => {
+            const inputData = landmarks.flatMap((lm) => [lm.x, lm.y, lm.z]);
+            const tensor = tf.tensor(inputData).reshape([1, 1, 63]);
+            return model.predict(tensor);
+          });
 
-          setDetectedClass(`Class: ${gesture}`);
-          setConfidence(confidence);
+          prediction.data().then((predArr) => {
+            const maxIndex = predArr.indexOf(Math.max(...predArr));
+            const gesture = labels[maxIndex];
+            const confidence = (predArr[maxIndex] * 100).toFixed(2);
 
-          // Tangani gesture sesuai prediksi
-          if (gesture === "SS" && !copiedRef.current) {
-            handleGestureSS({
-              playSound,
-              setShowFlash,
-              screenStream,
-              screenshotFromStreamAndUpload,
-              copiedRef,
-            });
-          }
+            setDetectedClass(`Class: ${gesture}`);
+            setConfidence(confidence);
 
-          if (gesture === "transfer_SS") {
-            handleGestureTransfer({
-              fetchLastScreenshot,
-              playSound,
-              setImageUrl,
-              setPasteEffect,
-              setDetectedClass,
-              copiedRef,
-            });
-          }
-        });
+            // Tangani gesture berdasarkan prediksi
+            if (gesture === "SS" && !copiedRef.current) {
+              handleGestureSS({
+                playSound,
+                setShowFlash,
+                screenStream,
+                screenshotFromStreamAndUpload,
+                videoRef,
+                copiedRef,
+              });
+            }
+
+            if (gesture === "transfer_SS") {
+              handleGestureTransfer({
+                fetchLastScreenshot,
+                playSound,
+                setImageUrl,
+                setPasteEffect,
+                setDetectedClass,
+                copiedRef,
+              });
+            }
+          });
+        } else {
+          setDetectedClass("Detecting hand...");
+          setConfidence("");
+        }
       } else {
-        // Tidak ada tangan terdeteksi
+        // Reset jika tangan hilang
+        frameCounterRef.current = 0;
+        handPresenceRef.current = false;
         setDetectedClass("No hand detected");
         setConfidence("");
       }
 
-      // Gambar ke canvas deteksi
+      // Gambar ke canvas
       drawResultsToCanvas(results, canvasRef);
     });
 
