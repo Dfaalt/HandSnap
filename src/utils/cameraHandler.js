@@ -89,7 +89,7 @@ const handleGestureTransfer = ({
 
     playSound("transfer_SS");
     setImageUrl(imageUrl);
-    toast.success("Transfer successful! File saved.", { autoClose: 2000 });
+    toast.success("Transfer successful! File downloaded.", { autoClose: 2000 });
 
     // Aktifkan animasi paste
     if (setPasteEffect) {
