@@ -133,7 +133,7 @@ const HandRecognition = () => {
       });
       setScreenStream(screen);
       setCameraActive(true);
-      toast.success("Screen capture permission granted!", { autoClose: 3000 });
+      toast.success("Start detection permission granted!", { autoClose: 3000 });
 
       // Deteksi jika user menghentikan screen share manual
       screen.getVideoTracks()[0].onended = () => {
@@ -144,7 +144,7 @@ const HandRecognition = () => {
     } catch (err) {
       console.error("Start Detection Failed:", err);
       handleStopDetection();
-      toast.error("Screen capture permission denied!", { autoClose: 3000 });
+      toast.error("Start detection permission denied!", { autoClose: 3000 });
     }
   };
 
