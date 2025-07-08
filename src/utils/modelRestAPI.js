@@ -42,6 +42,7 @@ export const screenshotFromStreamAndUpload = async (screenStream) => {
       if (!blob) throw new Error("Blob tidak tersedia");
       await uploadImage(blob, "screenshot-desktop.png"); // Upload ke server
       console.log("✅ Desktop screenshot uploaded");
+      toast.success("Screenshot successfully!", { autoClose: 2000 });
     }, "image/png");
   } catch (err) {
     console.warn("⚠️ Tidak dapat mengambil screenshot dari screen stream.");
@@ -55,9 +56,25 @@ export const screenshotFromStreamAndUpload = async (screenStream) => {
  */
 export const fetchLastScreenshot = async (setImageUrl) => {
   try {
-    const res = await axios.get(`${BASE_URL}/api/image/latest`);
-    const hex = res.data.image_data; // Data dari Flask berupa string heksadesimal
+    const res = await axios.get(`${BASE_URL}/api/image/latest`, {
+      timeout: 3000,
+      validateStatus: () => true, // Tangani 404 manual
+    });
 
+    if (res.status === 404 || !res.data.image_data?.trim()) {
+      toast.info("No screenshot data available yet.", { autoClose: 2000 });
+      setImageUrl(null);
+      return;
+    }
+
+    if (res.status !== 200) {
+      toast.error(`❌ Server error (${res.status}) fetching image`, {
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    const hex = res.data.image_data; // Data dari Flask berupa string heksadesimal
     // Konversi hex string ke array byte
     const binary = hex.match(/.{1,2}/g).map((byte) => parseInt(byte, 16));
     const blob = new Blob([new Uint8Array(binary)], { type: "image/png" });
@@ -66,6 +83,9 @@ export const fetchLastScreenshot = async (setImageUrl) => {
     setImageUrl(imageUrl); // Simpan ke state React
   } catch (err) {
     console.error("❌ Failed to fetch last screenshot:", err);
+    toast.error("❌ Failed to transfer image from server (API down)", {
+      autoClose: 3000,
+    });
   }
 };
 
@@ -81,6 +101,7 @@ const uploadImage = async (blob, filename) => {
   try {
     await axios.post(`${BASE_URL}/api/image/upload`, formData); // POST ke Flask API
   } catch (err) {
-    throw new Error("❌ Upload error: " + err.message);
+    toast.error("❌ Screenshot Failed: server is down.", { autoClose: 3000 });
+    throw new Error("❌ Upload error: server is down " + err.message);
   }
 };
