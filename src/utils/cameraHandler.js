@@ -149,81 +149,104 @@ export const setupCamera = ({
       minTrackingConfidence: 0.7,
     });
 
-    const sequenceBuffer = [];
-    const SEQUENCE_LENGTH = 10;
+    const sequenceBuffer = []; // Buffer untuk menyimpan 10 frame terakhir
+    const SEQUENCE_LENGTH = 10; // Panjang sequence yang dibutuhkan model
+    let lastGesture = null; // Untuk menyimpan gesture terakhir yang terdeteksi
+    let lastTriggerTime = 0; // Timestamp saat gesture terakhir dieksekusi
+    const GESTURE_COOLDOWN = 1500; // Waktu jeda antar gesture (dalam ms)
 
-    // Callback setiap kali hasil deteksi tersedia
+    // Event handler utama saat MediaPipe mengeluarkan hasil
     hands.onResults((results) => {
-      const landmarks = results.multiHandLandmarks?.[0];
+      const landmarks = results.multiHandLandmarks?.[0]; // Ambil landmark tangan pertama
 
       if (landmarks) {
-        // Hitung presence
         frameCounterRef.current++;
-        if (frameCounterRef.current >= 5) {
-          handPresenceRef.current = true;
+        if (frameCounterRef.current >= 3) {
+          handPresenceRef.current = true; // Setelah beberapa frame, dianggap tangan benar-benar terdeteksi
         }
 
         if (handPresenceRef.current) {
-          // Ambil 63 fitur dari 1 frame
+          // Ambil data x, y, z dari setiap landmark dan datarkan
           const inputData = landmarks.flatMap((lm) => [lm.x, lm.y, lm.z]);
+          sequenceBuffer.push(inputData); // Tambahkan ke buffer
 
-          // Tambahkan ke buffer
-          sequenceBuffer.push(inputData);
+          if (sequenceBuffer.length > SEQUENCE_LENGTH) {
+            sequenceBuffer.shift(); // Jaga agar buffer hanya berisi 10 frame terakhir
+          }
 
-          // Hanya prediksi jika sudah 10 frame
           if (sequenceBuffer.length === SEQUENCE_LENGTH) {
-            const prediction = tf.tidy(() => {
-              const inputTensor = tf.tensor([sequenceBuffer]); // [1,10,63]
-              return model.predict(inputTensor);
-            });
+            const inputTensor = tf.tensor([sequenceBuffer]); // Bentuk tensor [1, 10, 63]
+            const prediction = model.predict(inputTensor); // Prediksi menggunakan model
 
             prediction.data().then((predArr) => {
-              const maxIndex = predArr.indexOf(Math.max(...predArr));
-              const gesture = labels[maxIndex];
-              const confidence = (predArr[maxIndex] * 100).toFixed(2);
+              const maxIndex = predArr.indexOf(Math.max(...predArr)); // Cari index prediksi tertinggi
+              const gesture = labels[maxIndex]; // Ambil nama gestur dari label
+              const confidence = (predArr[maxIndex] * 100).toFixed(2); // Hitung persentase confidence
 
-              setDetectedClass(`Class: ${gesture}`);
-              setConfidence(confidence);
+              const now = Date.now(); // Ambil waktu sekarang
+              const gestureChanged = gesture !== lastGesture; // Apakah gestur baru berbeda dari sebelumnya
 
-              if (gesture === "SS" && !copiedRef.current) {
-                handleGestureSS({
-                  playSound,
-                  setShowFlash,
-                  screenStream,
-                  screenshotFromStreamAndUpload,
-                  videoRef,
-                  copiedRef,
-                });
+              if (gestureChanged) {
+                // Jika gestur berubah dari sebelumnya, kosongkan buffer
+                sequenceBuffer.length = 0;
+                lastGesture = gesture;
+                return; // Jangan jalankan gesture apapun, tunggu sampai gesture stabil
               }
 
-              if (gesture === "transfer_SS") {
-                handleGestureTransfer({
-                  fetchLastScreenshot,
-                  playSound,
-                  setImageUrl,
-                  setPasteEffect,
-                  setDetectedClass,
-                  copiedRef,
-                });
+              setConfidence(confidence); // Tampilkan confidence secara real-time
+              // Jika waktu sekarang sudah melewati cooldown dari gesture sebelumnya
+              if (now - lastTriggerTime > GESTURE_COOLDOWN) {
+                setDetectedClass(`Class: ${gesture}`); // Tampilkan nama kelas gesture
+
+                lastTriggerTime = now; // Simpan waktu trigger terakhir
+
+                // Jika gesture adalah "SS" dan belum pernah copy sebelumnya, jalankan screenshot
+                if (gesture === "SS" && !copiedRef.current) {
+                  handleGestureSS({
+                    playSound,
+                    setShowFlash,
+                    screenStream,
+                    screenshotFromStreamAndUpload,
+                    videoRef,
+                    copiedRef,
+                  });
+                }
+
+                // Jika gesture adalah "transfer_SS", jalankan proses paste
+                if (gesture === "transfer_SS") {
+                  handleGestureTransfer({
+                    fetchLastScreenshot,
+                    playSound,
+                    setImageUrl,
+                    setPasteEffect,
+                    setDetectedClass,
+                    copiedRef,
+                  });
+                }
+
+                // Kosongkan buffer setelah gesture dijalankan agar tidak dobel trigger
+                sequenceBuffer.length = 0;
               }
             });
 
-            // Kosongkan buffer agar isi frame berikutnya
-            sequenceBuffer.length = 0;
+            inputTensor.dispose(); // Bersihkan tensor dari memori
           }
         } else {
+          // Jika tangan belum stabil muncul, tampilkan status deteksi
           setDetectedClass("Detecting hand...");
           setConfidence("");
         }
       } else {
-        // Reset jika tangan hilang
+        // Jika tidak ada tangan terdeteksi, reset semua state terkait deteksi
         frameCounterRef.current = 0;
         handPresenceRef.current = false;
         setDetectedClass("No hand detected");
         setConfidence("");
+        sequenceBuffer.length = 0;
+        lastGesture = null;
       }
 
-      // Gambar ke canvas
+      // Gambar hasil landmark ke canvas
       drawResultsToCanvas(results, canvasRef);
     });
 
