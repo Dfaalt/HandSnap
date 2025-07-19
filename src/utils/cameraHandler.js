@@ -107,7 +107,6 @@ const handleGestureTransfer = ({
       document.body.removeChild(a);
     }, 500); // Delay 500ms sebelum download
 
-    window.lastTransferTime = Date.now();
     copiedRef.current = false; // Reset agar bisa screenshot lagi
   });
 };
@@ -150,55 +149,68 @@ export const setupCamera = ({
       minTrackingConfidence: 0.7,
     });
 
+    const sequenceBuffer = [];
+    const SEQUENCE_LENGTH = 10;
+
     // Callback setiap kali hasil deteksi tersedia
     hands.onResults((results) => {
       const landmarks = results.multiHandLandmarks?.[0];
 
       if (landmarks) {
-        // Tambah counter jika tangan terdeteksi
+        // Hitung presence
         frameCounterRef.current++;
         if (frameCounterRef.current >= 5) {
           handPresenceRef.current = true;
         }
 
         if (handPresenceRef.current) {
-          const prediction = tf.tidy(() => {
-            const inputData = landmarks.flatMap((lm) => [lm.x, lm.y, lm.z]);
-            const tensor = tf.tensor(inputData).reshape([1, 1, 63]);
-            return model.predict(tensor);
-          });
+          // Ambil 63 fitur dari 1 frame
+          const inputData = landmarks.flatMap((lm) => [lm.x, lm.y, lm.z]);
 
-          prediction.data().then((predArr) => {
-            const maxIndex = predArr.indexOf(Math.max(...predArr));
-            const gesture = labels[maxIndex];
-            const confidence = (predArr[maxIndex] * 100).toFixed(2);
+          // Tambahkan ke buffer
+          sequenceBuffer.push(inputData);
 
-            setDetectedClass(`Class: ${gesture}`);
-            setConfidence(confidence);
+          // Hanya prediksi jika sudah 10 frame
+          if (sequenceBuffer.length === SEQUENCE_LENGTH) {
+            const prediction = tf.tidy(() => {
+              const inputTensor = tf.tensor([sequenceBuffer]); // [1,10,63]
+              return model.predict(inputTensor);
+            });
 
-            // Tangani gesture berdasarkan prediksi
-            if (gesture === "SS" && !copiedRef.current) {
-              handleGestureSS({
-                playSound,
-                setShowFlash,
-                screenStream,
-                screenshotFromStreamAndUpload,
-                videoRef,
-                copiedRef,
-              });
-            }
+            prediction.data().then((predArr) => {
+              const maxIndex = predArr.indexOf(Math.max(...predArr));
+              const gesture = labels[maxIndex];
+              const confidence = (predArr[maxIndex] * 100).toFixed(2);
 
-            if (gesture === "transfer_SS") {
-              handleGestureTransfer({
-                fetchLastScreenshot,
-                playSound,
-                setImageUrl,
-                setPasteEffect,
-                setDetectedClass,
-                copiedRef,
-              });
-            }
-          });
+              setDetectedClass(`Class: ${gesture}`);
+              setConfidence(confidence);
+
+              if (gesture === "SS" && !copiedRef.current) {
+                handleGestureSS({
+                  playSound,
+                  setShowFlash,
+                  screenStream,
+                  screenshotFromStreamAndUpload,
+                  videoRef,
+                  copiedRef,
+                });
+              }
+
+              if (gesture === "transfer_SS") {
+                handleGestureTransfer({
+                  fetchLastScreenshot,
+                  playSound,
+                  setImageUrl,
+                  setPasteEffect,
+                  setDetectedClass,
+                  copiedRef,
+                });
+              }
+            });
+
+            // Kosongkan buffer agar isi frame berikutnya
+            sequenceBuffer.length = 0;
+          }
         } else {
           setDetectedClass("Detecting hand...");
           setConfidence("");
