@@ -24,7 +24,6 @@ const HandRecognition = () => {
   const canvasRef = useRef(null); // Canvas utama untuk deteksi
   const canvasPiPRef = useRef(null); // Canvas untuk Picture-in-Picture
   const cameraInstance = useRef(null); // Instance kamera dari mediapipe/camera
-  const copiedRef = useRef(false); // Flag gesture sudah copy
   const pipVideo = useRef(null); // Video element untuk PiP
   const handPresenceRef = useRef(false); // Status apakah tangan terlihat
   const frameCounterRef = useRef(0); // Counter frame tangan
@@ -47,7 +46,6 @@ const HandRecognition = () => {
       videoRef,
       canvasRef,
       cameraInstance,
-      copiedRef,
       handPresenceRef,
       frameCounterRef,
       model,
@@ -100,7 +98,6 @@ const HandRecognition = () => {
 
   // Reset semua state saat klik restart detection
   const resetAllStates = () => {
-    copiedRef.current = false; // Reset flag gesture copy
     setDetectedClass(""); // Kosongkan hasil deteksi
     setConfidence(""); // Reset confidence
     setImageUrl(null); // Kosongkan gambar screenshot

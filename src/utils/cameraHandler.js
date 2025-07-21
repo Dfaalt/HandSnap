@@ -30,15 +30,30 @@ const drawResultsToCanvas = (results, canvasRef) => {
   ctx.restore(); // Kembalikan state canvas
 };
 
+// Cek cooldown gesture biar ga spam
+const isCooldown = (key, interval) => {
+  if (!window.cooldowns) window.cooldowns = {};
+  const now = Date.now();
+  if (!window.cooldowns[key]) window.cooldowns[key] = 0;
+
+  if (now - window.cooldowns[key] < interval) {
+    return true; // masih cooldown
+  }
+
+  window.cooldowns[key] = now;
+  return false; // boleh lanjut
+};
+
 // ✌️ Tangani gesture "SS" (screenshot)
 const handleGestureSS = ({
   playSound,
   setShowFlash,
   screenStream,
   screenshotFromStreamAndUpload,
-  copiedRef,
 }) => {
-  copiedRef.current = true; // Hindari multiple trigger
+  // Cooldown gestur SS
+  if (isCooldown("ss", 2500)) return;
+
   playSound("SS");
 
   // Tampilkan animasi flash
@@ -71,14 +86,9 @@ const handleGestureTransfer = ({
   setImageUrl,
   setPasteEffect,
   setDetectedClass,
-  copiedRef,
 }) => {
-  // Batasi frekuensi gesture ini agar tidak spam
-  if (!window.lastTransferTime) window.lastTransferTime = 0;
-  const now = Date.now();
-  const cooldown = 2500;
-  if (now - window.lastTransferTime < cooldown) return;
-  window.lastTransferTime = now;
+  // Cooldown gesture transfer_SS
+  if (isCooldown("transfer_ss", 2500)) return;
 
   // Ambil screenshot terakhir dari server
   fetchLastScreenshot((imageUrl) => {
@@ -106,8 +116,6 @@ const handleGestureTransfer = ({
       a.click();
       document.body.removeChild(a);
     }, 500); // Delay 500ms sebelum download
-
-    copiedRef.current = false; // Reset agar bisa screenshot lagi
   });
 };
 
@@ -122,7 +130,6 @@ export const setupCamera = ({
   handPresenceRef,
   frameCounterRef,
   cameraInstance,
-  copiedRef,
   model,
   labels,
   screenStream,
@@ -201,14 +208,13 @@ export const setupCamera = ({
                 lastTriggerTime = now; // Simpan waktu trigger terakhir
 
                 // Jika gesture adalah "SS" dan belum pernah copy sebelumnya, jalankan screenshot
-                if (gesture === "SS" && !copiedRef.current) {
+                if (gesture === "SS") {
                   handleGestureSS({
                     playSound,
                     setShowFlash,
                     screenStream,
                     screenshotFromStreamAndUpload,
                     videoRef,
-                    copiedRef,
                   });
                 }
 
@@ -220,7 +226,6 @@ export const setupCamera = ({
                     setImageUrl,
                     setPasteEffect,
                     setDetectedClass,
-                    copiedRef,
                   });
                 }
 
