@@ -128,7 +128,6 @@ export const setupCamera = ({
   videoRef,
   canvasRef,
   handPresenceRef,
-  frameCounterRef,
   cameraInstance,
   model,
   labels,
@@ -162,14 +161,21 @@ export const setupCamera = ({
     let lastTriggerTime = 0; // Timestamp saat gesture terakhir dieksekusi
     const GESTURE_COOLDOWN = 1500; // Waktu jeda antar gesture (dalam ms)
 
+    // Filter unknown gesture
+    const ALLOWED = new Set(["SS", "transfer_SS"]); // gesture yang boleh eksekusi
+    const CONF_THRESHOLD = 0.85; // minimal confidence (0..1)
+    const MARGIN_THRESHOLD = 0.25; // selisih top1 - top2
+
     // Event handler utama saat MediaPipe mengeluarkan hasil
     hands.onResults((results) => {
       const landmarks = results.multiHandLandmarks?.[0]; // Ambil landmark tangan pertama
 
       if (landmarks) {
-        frameCounterRef.current++;
-        if (frameCounterRef.current >= 2) {
-          handPresenceRef.current = true; // Setelah beberapa frame, dianggap tangan benar-benar terdeteksi
+        // set ONCE saat tangan baru terdeteksi
+        if (!handPresenceRef.current) {
+          handPresenceRef.current = true;
+          setDetectedClass("Detected gesture..."); // ← bacaan saat gestur terdeteksi
+          setConfidence("");
         }
 
         if (handPresenceRef.current) {
@@ -190,6 +196,30 @@ export const setupCamera = ({
               const gesture = labels[maxIndex]; // Ambil nama gestur dari label
               const confidence = (predArr[maxIndex] * 100).toFixed(2); // Hitung persentase confidence
 
+              // Hitung top2 & margin
+              const scored = predArr
+                .map((p, i) => ({ p, i }))
+                .sort((a, b) => b.p - a.p);
+              const top1 = scored[0];
+              const top2 = scored[1] || { p: 0 };
+              const conf01 = top1.p; // 0..1
+              const margin = top1.p - top2.p; // 0..1
+
+              // Gate UNKNOWN / tidak diizinkan
+              if (
+                !ALLOWED.has(gesture) ||
+                gesture === "UNKNOWN" ||
+                conf01 < CONF_THRESHOLD ||
+                margin < MARGIN_THRESHOLD
+              ) {
+                setDetectedClass("Unknown gesture");
+                setConfidence(""); // sembunyikan angka biar gak misleading
+                // opsional: bersihin buffer biar gak kebawa ke frame berikutnya
+                sequenceBuffer.length = 0;
+                // jangan eksekusi apa pun
+                return;
+              }
+
               const now = Date.now(); // Ambil waktu sekarang
               const gestureChanged = gesture !== lastGesture; // Apakah gestur baru berbeda dari sebelumnya
 
@@ -201,7 +231,6 @@ export const setupCamera = ({
               }
 
               setConfidence(confidence); // Tampilkan confidence secara real-time
-              // Jika waktu sekarang sudah melewati cooldown dari gesture sebelumnya
               if (now - lastTriggerTime > GESTURE_COOLDOWN) {
                 setDetectedClass(`Class: ${gesture}`); // Tampilkan nama kelas gesture
 
@@ -236,16 +265,11 @@ export const setupCamera = ({
 
             inputTensor.dispose(); // Bersihkan tensor dari memori
           }
-        } else {
-          // Jika tangan belum stabil muncul, tampilkan status deteksi
-          setDetectedClass("Detecting hand...");
-          setConfidence("");
         }
       } else {
         // Jika tidak ada tangan terdeteksi, reset semua state terkait deteksi
-        frameCounterRef.current = 0;
         handPresenceRef.current = false;
-        setDetectedClass("No hand detected");
+        setDetectedClass("No gesture detected");
         setConfidence("");
         sequenceBuffer.length = 0;
         lastGesture = null;

@@ -26,10 +26,9 @@ const HandRecognition = () => {
   const cameraInstance = useRef(null); // Instance kamera dari mediapipe/camera
   const pipVideo = useRef(null); // Video element untuk PiP
   const handPresenceRef = useRef(false); // Status apakah tangan terlihat
-  const frameCounterRef = useRef(0); // Counter frame tangan
 
   // === Label gesture ===
-  const labels = useMemo(() => ["SS", "transfer_SS"], []);
+  const labels = useMemo(() => ["SS", "UNKNOWN", "transfer_SS"], []);
 
   // Load model sekali saat mount
   useEffect(() => {
@@ -47,7 +46,6 @@ const HandRecognition = () => {
       canvasRef,
       cameraInstance,
       handPresenceRef,
-      frameCounterRef,
       model,
       labels,
       screenStream,
